@@ -31,6 +31,7 @@ typedef struct {
     String* history;
     String* curdir;
     String* lastdir;  // initialized to zero
+    char** args;
 } State;
 
 char* read_line(FILE* fp);
