@@ -42,7 +42,7 @@ char* get_cur_dir(void) {
 State* exec_cd(State* s) {
     char path[MAX_BUFF];
     if (array_length(s->args) > 2) {
-        printf("too many arguments...");
+        fprintf(stderr, "too many arguments...");
         return s;
     }
 
@@ -59,19 +59,18 @@ State* exec_cd(State* s) {
     // cd -
     if (!strcmp(arg, "-")) {
         if (!strcmp(s->lastdir->str, "")) {
-            printf("no previous directory\n");
+            fprintf(stderr, "no previous directory\n");
             return s;
         }
         arg = s->lastdir->str;
     } else {
-        /* this should be done on all words during the parse phase */
-        if (*arg == '~') {
+        // cd ~ or anything else relative to home
+        if (arg[0] == '~') {
             if (arg[1] == '/' || arg[1] == '\0') {
                 snprintf(path, sizeof path, "%s%s", getenv("HOME"), arg + 1);
-                arg = path;
+                arg = strcat(getenv("HOME"), arg + 1);
             } else {
-                /* ~name should expand to the home directory of user with login `name` 
-                   this can be implemented with getpwent() */
+                // cd ~jald
                 fprintf(stderr, "syntax not supported: %s\n", arg);
                 return s;
             }
@@ -100,12 +99,17 @@ void* foo(void* s){
     } else if (!strcmp(((State*) s)->args[0], "exit")) {
         str_free(((State*) s)->history);
         str_free(((State*) s)->curdir);
+        free_nested_array(((State*) s)->args);
         free(s);
         exit(0);
     }
     else {
-        printf("%s", ((State*) s)->args[0]);
-        execvp(((State*) s)->args[0], ((State*) s)->args);
+        int pid = fork();
+        if (!pid) {
+            execvp(((State*) s)->args[0], ((State*) s)->args);
+        } else {
+            wait(NULL);
+        }
     }
     free_nested_array(((State*) s)->args);
 
@@ -136,32 +140,6 @@ int main(int argc, char** argv) {
         // Wait for foo() and retrieve value in ptr;
         pthread_join(id, (void**)s);
 
-        // int pid = fork();
-
-        // child
-        // if (!pid) {
-            // if (!strcmp(args[0], "cd")) {
-            //     exec_cd(args, s);
-            //     printf("Child: %s\n", s->lastdir->str);
-            //     exit(0);
-            // } else if (!strcmp(line, "history\n")) {
-            //     printf("%s", s->history->str);
-            // } else if (!strcmp(args[0], "exit")) {
-            //     str_free(s->history);
-            //     str_free(s->curdir);
-            //     free(s);
-            //     exit(0);
-            // }
-            // else {
-            //     printf("%s", args[0]);
-            //     execvp(args[0], args);
-            // }
-            // free_nested_array(args);
-        // } else {
-        //     printf("Parent: %s\n", s->lastdir->str);
-        //     // why does nothing get executed after waitpid :(
-        //     waitpid(pid, NULL, 0);
-        // }
     }
     
 }
