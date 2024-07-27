@@ -10,12 +10,16 @@
 #include "shellper.h"
 #include <pthread.h>
 
-#define READY "8=D"
-#define MAX_BUFF 1000
-#define MAX_PATH 1000
+#include <termios.h>
+// #include <dos.h> // delay()
+
+#define WEEN "   |\\      _,,,---,,_\n   /,`.-'`'    -.  ;-;;,_\n  |,4-  ) )-,_. ,\\ (  `'-'\n '---''(_/--'  `-'\\_)\n"
+
 
 char* get_cur_dir(void);
 State* exec_cd(State* s);
+int get_prev(void);
+int get_next(void);
 
 char* get_cur_dir(void) {
     char cwd[MAX_BUFF];
@@ -88,58 +92,136 @@ State* exec_cd(State* s) {
 }
 
 void* foo(void* s){
+    State* state = (State*) s;
     // Print value received as argument:
-    if (!strcmp(((State*) s)->args[0], "cd")) {
-        exec_cd(((State*) s));
-        printf("Child: %s\n", ((State*) s)->lastdir->str);
+    if (array_length(state->args) == 0) {
 
-    } else if (!strcmp(((State*) s)->args[0], "history\n")) {
-        printf("%s", ((State*) s)->history->str);
-
-    } else if (!strcmp(((State*) s)->args[0], "exit")) {
-        str_free(((State*) s)->history);
-        str_free(((State*) s)->curdir);
-        free_nested_array(((State*) s)->args);
+    } else if (!strcmp(state->args[0], "cd")) {
+        exec_cd(state);
+    } else if (!strcmp(state->args[0], "history") && array_length(state->args) == 1) {
+        printf("%s", state->history->str);
+    } else if (!strcmp(state->args[0], "8=D")) {
+        printf(WEEN);
+    } else if (!strcmp(state->args[0], "exit") && array_length(state->args) == 1) {
+        str_free(state->curdir);
+        str_free(state->history);
+        free_nested_array(state->args);
         free(s);
         exit(0);
     }
     else {
         int pid = fork();
         if (!pid) {
-            execvp(((State*) s)->args[0], ((State*) s)->args);
+            execvp(state->args[0], state->args);
         } else {
             wait(NULL);
         }
     }
-    free_nested_array(((State*) s)->args);
+    free_nested_array(state->args);
 
     // Return reference to global variable:
     pthread_exit(s);
 }
 
-int main(int argc, char** argv) {
+void set_non_canonical_mode(void) {
+    struct termios tty;
+    tcgetattr(STDIN_FILENO, &tty);
+    tty.c_lflag &= ~ICANON; // disable canonical mode
+    tty.c_lflag &= ~ECHO;   // disable echo
+    tcsetattr(STDIN_FILENO, TCSANOW, &tty);
+}
+
+void reset_terminal_mode(struct termios *saved_attributes) {
+    tcsetattr(STDIN_FILENO, TCSANOW, saved_attributes);
+}
+
+int start_shell(void) {
     State* s = (State*) malloc(sizeof(State));
     s->history = str_init("");
     s->curdir = str_init(get_cur_dir());
     s->lastdir = str_init("");
+    int count = 1;
+
+
     while (true) {
-        print_colour(READY, PINK, BBLUE, " ");
-        // print_colour("D ", PINK, BBLUE, " ");
+        char line[1000];
+        int n = 0;
+        // print terminal prefix
+        char* ready = growing_ween((count%13));
+        print_colour(ready, rand_col(), rand_bg(), " ");
+        print_colour(s->curdir->str, rand_col(), rand_bg(), " ");
+
+        struct termios saved_attributes;
+        tcgetattr(STDIN_FILENO, &saved_attributes);
+        set_non_canonical_mode();
+
+        char ch = '\0';
+
+        while (ch != '\n') {
         
-        print_colour(s->curdir->str, RED, BCYAN, " ");
 
-        char* line = read_line(stdin); 
-
+        ch = getchar();
+        if (ch == '\033') { // if the first character is the escape character
+            while (ch != '\n') {
+                if (ch != '\033') {
+                    printf("%c", ch);
+                    ch = getchar();
+                    continue;
+                }
+            getchar(); // skip the '['
+            switch(getchar()) { // the actual arrow key
+                case 'A':
+                    printf("\33[2K\r");
+                    print_colour(ready, rand_col(), rand_bg(), " ");
+                    print_colour(s->curdir->str, rand_col(), rand_bg(), " ");
+                    printf("up key");
+                    break;
+                case 'B':
+                    printf("\33[2K\r");
+                    print_colour(ready, rand_col(), rand_bg(), " ");
+                    print_colour(s->curdir->str, rand_col(), rand_bg(), " ");
+                    printf("down key");
+                    break;
+                case 'C':
+                    // right arrow
+                    break;
+                case 'D':
+                    // left arrow
+                    break;
+                default:
+                    // other
+                    printf("wtf\n");
+                    break;
+            }
+            ch = getchar();
+            }
+            printf("\n");
+            line[n] = ch;
+            
+        } else {
+            putchar(ch);
+            line[n] = ch;
+        }
+        n = n + 1;
+        }
+        reset_terminal_mode(&saved_attributes);
+        line[n-1] = '\0';
         s->args = split_string(line, " ");
-        strcat(line, "\n");
-        strcat(s->history->str, line);
-        s->history = str_init(s->history->str);
-
+        // start to check and execute command
         pthread_t id;
         pthread_create(&id, NULL, foo, s);
         // Wait for foo() and retrieve value in ptr;
         pthread_join(id, (void**)s);
 
+        // append command to history
+        s->history = str_concat(s->history, line);
+        s->history = str_concat(s->history, "\n");
+        
+        free(ready);
+        count = count + 1;
     }
-    
+}
+
+int main(int argc, char** argv) {
+    return start_shell();
 }

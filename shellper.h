@@ -1,6 +1,8 @@
 #ifndef SHELLPER_H_   /* Include guard */
 #define SHELLPER_H_
 
+#define MAX_BUFF 1000
+
 enum Colours {
    BLACK = 30,
    RED = 31,
@@ -41,6 +43,10 @@ int array_length(char** array);
 void str_free(String* string);
 String* str_init(const char* string);
 void free_nested_array(char** array);
+int rand_col(void);
+int rand_bg(void);
+char* growing_ween(int size);
+String* str_concat(String* start, char* end);
 
 
 #endif

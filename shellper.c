@@ -125,3 +125,44 @@ char** split_string(char* string, char* delim) {
     split[i] = NULL;
     return split;
 }
+
+int rand_col(void) {
+    int col = (rand() % 8) + 30;
+    return col;
+}
+
+int rand_bg(void) {
+    int col = (rand() % 8) + 40;
+    return col;
+}
+
+char* growing_ween(int size) {
+    char* ready = malloc(size + 1 + 2);
+    strcat(ready, "8");
+
+    for (int i = 0; i < size; i++) {
+        strcat(ready, "=");
+    }
+
+    strcat(ready, "D");
+    return ready;
+}
+
+/* String* str_concat(String* start, char* end)
+ *
+ * given two strings, concatinates them together
+ *
+ * start: the start string as a String struct
+ * end: the end string
+ *
+ * returns: a concatenated string
+ */
+String* str_concat(String* start, char* end) {
+    char* str = malloc(start->len + strlen(end) + 1);
+    strcpy(str, start->str);
+    strcat(str, end);
+    str_free(start);
+    String* fin = str_init(str);
+    free(str);
+    return fin;
+}
