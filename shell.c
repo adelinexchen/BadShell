@@ -145,6 +145,7 @@ int start_shell(void) {
 
     while (true) {
         char line[1000];
+        memset(line, '\0', 1000);
         int n = 0;
         // print terminal prefix
         char* ready = growing_ween((count%13));
@@ -158,53 +159,69 @@ int start_shell(void) {
         char ch = '\0';
 
         while (ch != '\n') {
-        
-
-        ch = getchar();
-        if (ch == '\033') { // if the first character is the escape character
-            while (ch != '\n') {
-                if (ch != '\033') {
-                    printf("%c", ch);
-                    ch = getchar();
-                    continue;
-                }
-            getchar(); // skip the '['
-            switch(getchar()) { // the actual arrow key
-                case 'A':
-                    printf("\33[2K\r");
-                    print_colour(ready, rand_col(), rand_bg(), " ");
-                    print_colour(s->curdir->str, rand_col(), rand_bg(), " ");
-                    printf("up key");
-                    break;
-                case 'B':
-                    printf("\33[2K\r");
-                    print_colour(ready, rand_col(), rand_bg(), " ");
-                    print_colour(s->curdir->str, rand_col(), rand_bg(), " ");
-                    printf("down key");
-                    break;
-                case 'C':
-                    // right arrow
-                    break;
-                case 'D':
-                    // left arrow
-                    break;
-                default:
-                    // other
-                    printf("wtf\n");
-                    break;
-            }
             ch = getchar();
+            if (ch == '\033') { // if the first character is the escape character
+                while (ch != '\n') {
+                    if (ch != '\033' && ch != 127) {
+                        printf("%c", ch);
+                        ch = getchar();
+                        continue;
+                    } else if (ch == 127) {
+                        printf("\b\033[K");
+                        line[n-1] = '\0';
+                        n -= 1;
+                    }
+                getchar(); // skip the '['
+                switch(getchar()) { // the actual arrow key
+                    case 'A':
+                        // up arrow
+                        printf("\33[2K\r");
+                        print_colour(ready, rand_col(), rand_bg(), " ");
+                        print_colour(s->curdir->str, rand_col(), rand_bg(), " ");
+                        printf("up key");
+                        break;
+                    case 'B':
+                        printf("\33[2K\r");
+                        print_colour(ready, rand_col(), rand_bg(), " ");
+                        print_colour(s->curdir->str, rand_col(), rand_bg(), " ");
+                        printf("down key");
+                        break;
+                    case 'C':
+                        // right arrow
+                        // printf("\033[1C");
+                        break;
+                    case 'D':
+                        // left arrow
+                        // printf("\b");
+                        break;
+                    default:
+                        // other
+                        printf("wtf\n");
+                        break;
+                }
+                ch = getchar();
+                }
+                printf("\n");
+                line[n] = ch;
+            } else if (ch == 127) {
+                // back space
+                if (n > 0) {
+                    // move back and delete char
+                    printf("\b\033[K");
+                    // printf("\n%d, %s\n", n-1, line);
+                    line[n-1] = '\0';
+                    n -= 1;
+                }
+                // printf("\nbackspace: %d, %s\n", n, line);
+            } else {
+                putchar(ch);
+                line[n] = ch;
+                n = n + 1;
             }
-            printf("\n");
-            line[n] = ch;
-            
-        } else {
-            putchar(ch);
-            line[n] = ch;
-        }
-        n = n + 1;
+            // printf(" %d\n", n);
         }
         reset_terminal_mode(&saved_attributes);
+        printf("%s\n", line);
         line[n-1] = '\0';
         s->args = split_string(line, " ");
         // start to check and execute command
