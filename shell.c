@@ -9,11 +9,10 @@
 #include <errno.h>
 #include "shellper.h"
 #include <pthread.h>
-
 #include <termios.h>
-// #include <dos.h> // delay()
 
-#define WEEN "   |\\      _,,,---,,_\n   /,`.-'`'    -.  ;-;;,_\n  |,4-  ) )-,_. ,\\ (  `'-'\n '---''(_/--'  `-'\\_)\n"
+#define WEEN "   |\\      _,,,---,,_\n   /,`.-'`'    -.  ;-;;,_\n  |,4-  ) "\
+    ")-,_. ,\\ (  `'-'\n '---''(_/--'  `-'\\_)\n"
 
 
 char* get_cur_dir(void);
@@ -135,26 +134,50 @@ void reset_terminal_mode(struct termios *saved_attributes) {
     tcsetattr(STDIN_FILENO, TCSANOW, saved_attributes);
 }
 
+void shift_left(char* cmd, int cursor) {
+    /**
+     * e.g. ([a, b, c, d, e, , ], 1, a) ==> [a, a, b, c, d, e, ]
+     */
+    // printf("shift left: %s \n", cmd+cursor+1);
+    for (int i = cursor; i < strlen(cmd); i++) {
+        cmd[i] = cmd[i+1];
+    }
+}
+
+void shift_right(char* cmd, int cursor, char letter) {
+    /**
+     * e.g. ([a, b, c, d, e, , ], 1, a) ==> [a, a, b, c, d, e, ]
+     */
+    printf("shift right: %s, %d, %c, %s, ", cmd, cursor, letter, cmd+cursor);
+    for (int i = strlen(cmd); i > cursor; i--) {
+        cmd[i] = cmd[i-1];
+    }
+    cmd[cursor] = letter;
+    printf("%s\n", cmd);
+}
+
 int start_shell(void) {
     State* s = (State*) malloc(sizeof(State));
     s->history = str_init("");
     s->curdir = str_init(get_cur_dir());
     s->lastdir = str_init("");
     int count = 1;
+    struct termios saved_attributes;
+    tcgetattr(STDIN_FILENO, &saved_attributes);
+    set_non_canonical_mode();
 
 
     while (true) {
         char line[1000];
         memset(line, '\0', 1000);
-        int n = 0;
+        int cursor = 0;
+        int cmd_len = 0;
         // print terminal prefix
         char* ready = growing_ween((count%13));
         print_colour(ready, rand_col(), rand_bg(), " ");
         print_colour(s->curdir->str, rand_col(), rand_bg(), " ");
 
-        struct termios saved_attributes;
-        tcgetattr(STDIN_FILENO, &saved_attributes);
-        set_non_canonical_mode();
+
 
         char ch = '\0';
 
@@ -163,66 +186,79 @@ int start_shell(void) {
             if (ch == '\033') { // if the first character is the escape character
                 while (ch != '\n') {
                     if (ch != '\033' && ch != 127) {
-                        printf("%c", ch);
+                        shift_right(line, cursor, ch);
+                        putchar(ch);
+                        // line[cursor] = ch;
+                        cursor += 1;
+                        cmd_len += 1;
                         ch = getchar();
                         continue;
                     } else if (ch == 127) {
                         printf("\b\033[K");
-                        line[n-1] = '\0';
-                        n -= 1;
+                        line[cursor-1] = '\0';
+                        cursor -= 1;
                     }
-                getchar(); // skip the '['
-                switch(getchar()) { // the actual arrow key
-                    case 'A':
-                        // up arrow
-                        printf("\33[2K\r");
-                        print_colour(ready, rand_col(), rand_bg(), " ");
-                        print_colour(s->curdir->str, rand_col(), rand_bg(), " ");
-                        printf("up key");
-                        break;
-                    case 'B':
-                        printf("\33[2K\r");
-                        print_colour(ready, rand_col(), rand_bg(), " ");
-                        print_colour(s->curdir->str, rand_col(), rand_bg(), " ");
-                        printf("down key");
-                        break;
-                    case 'C':
-                        // right arrow
-                        // printf("\033[1C");
-                        break;
-                    case 'D':
-                        // left arrow
-                        // printf("\b");
-                        break;
-                    default:
-                        // other
-                        printf("wtf\n");
-                        break;
-                }
-                ch = getchar();
+                    getchar(); // skip the '['
+                    switch(getchar()) { // the actual arrow key
+                        case 'A':
+                            // up arrow
+                            printf("\33[2K\r");
+                            print_colour(ready, rand_col(), rand_bg(), " ");
+                            print_colour(s->curdir->str, rand_col(), rand_bg(), " ");
+                            printf("up key");
+                            break;
+                        case 'B':
+                            printf("\33[2K\r");
+                            print_colour(ready, rand_col(), rand_bg(), " ");
+                            print_colour(s->curdir->str, rand_col(), rand_bg(), " ");
+                            printf("down key");
+                            break;
+                        case 'C':
+                            // right arrow
+                            if (cursor < cmd_len) {
+                                printf("\033[1C");
+                                cursor += 1;
+                            }
+                            break;
+                        case 'D':
+                            // left arrow
+                            if (cursor > 0) {
+                                printf("\033[D");
+                                cursor -= 1;
+                            }
+                            break;
+                        default:
+                            // other
+                            printf("wtf\n");
+                            break;
+                    }
+                    ch = getchar();
                 }
                 printf("\n");
-                line[n] = ch;
+                // line[cursor] = ch;
             } else if (ch == 127) {
                 // back space
-                if (n > 0) {
+                if (cursor > 0) {
                     // move back and delete char
                     printf("\b\033[K");
                     // printf("\n%d, %s\n", n-1, line);
-                    line[n-1] = '\0';
-                    n -= 1;
+                    line[cursor-1] = '\0';
+                    cursor -= 1;
+                    cmd_len -= 1;
                 }
                 // printf("\nbackspace: %d, %s\n", n, line);
             } else {
+                shift_right(line, cursor, ch);
                 putchar(ch);
-                line[n] = ch;
-                n = n + 1;
+                // line[cursor] = ch;
+                cursor += 1;
+                cmd_len += 1;
             }
             // printf(" %d\n", n);
         }
-        reset_terminal_mode(&saved_attributes);
-        printf("%s\n", line);
-        line[n-1] = '\0';
+        // reset_terminal_mode(&saved_attributes);
+        printf("cmd: %s\n", line);
+        line[cursor-1] = '\0';
         s->args = split_string(line, " ");
         // start to check and execute command
         pthread_t id;
@@ -241,4 +277,9 @@ int start_shell(void) {
 
 int main(int argc, char** argv) {
     return start_shell();
+    // char l[1000] = "1235";
+    // printf("%s\n", l);
+    // shift_right(l, 3, '4');
+    // printf("%s\n", l);
+    return 1;
 }
