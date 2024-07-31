@@ -11,7 +11,9 @@
 * colours changing at random
 * growing weiner
 
-### What is yet to work
+### What I am working on
+* arrow key functions
 
 ### What I'd like to add
 * redirection
+* tab to autocomplete

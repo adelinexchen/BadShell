@@ -230,11 +230,13 @@ int start_shell(void) {
             } else {
                 shift_right(line, cursor, ch);
                 putchar(ch);
+                printf("\033[s");
 
                 // line[cursor] = ch;
                 cursor += 1;
                 cmd_len += 1;
-                printf("%c", line[cursor]);
+                printf("%s", line+cursor);
+                printf("\033[u");
             }
             // printf(" %d\n", n);
             ch = getchar();
@@ -259,8 +261,8 @@ int start_shell(void) {
 }
 
 int main(int argc, char** argv) {
-    printf("ac\033[Da\n");
-    // return start_shell();
+    // printf("ac\033[Da\n");
+    return start_shell();
     // char l[1000] = "1235";
     // printf("%s\n", l);
     // shift_right(l, 3, '4');
