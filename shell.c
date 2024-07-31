@@ -220,11 +220,15 @@ int start_shell(void) {
                 // back space
                 if (cursor > 0) {
                     // move back and delete char
-                    printf("\b\033[K");
                     // printf("\n%d, %s\n", n-1, line);
-                    line[cursor-1] = '\0';
+                    // line[cursor-1] = '\0';
+                    shift_left(line, cursor-1);
+                    printf("\b\033[K");
+                    printf("\033[s");
                     cursor -= 1;
                     cmd_len -= 1;
+                    printf("%s", line+cursor);
+                    printf("\033[u");
                 }
                 // printf("\nbackspace: %d, %s\n", n, line);
             } else {
