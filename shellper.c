@@ -167,3 +167,21 @@ String* str_concat(String* start, char* end) {
     return fin;
 }
 
+void shift_left(char* cmd, int cursor) {
+    /**
+     * e.g. ([a, b, c, d, e, , ], 1, a) ==> [a, a, b, c, d, e, ]
+     */
+    for (int i = cursor; i < strlen(cmd); i++) {
+        cmd[i] = cmd[i+1];
+    }
+}
+
+void shift_right(char* cmd, int cursor, char letter) {
+    /**
+     * e.g. ([a, b, c, d, e, , ], 1, a) ==> [a, a, b, c, d, e, ]
+     */
+    for (int i = strlen(cmd); i > cursor; i--) {
+        cmd[i] = cmd[i-1];
+    }
+    cmd[cursor] = letter;
+}

@@ -7,90 +7,19 @@
 #include <signal.h>
 #include <stdbool.h>
 #include <errno.h>
-#include "shellper.h"
 #include <pthread.h>
 #include <termios.h>
+#include "shellper.h"
+#include "commands.h"
 
 #define WEEN "   |\\      _,,,---,,_\n   /,`.-'`'    -.  ;-;;,_\n  |,4-  ) "\
     ")-,_. ,\\ (  `'-'\n '---''(_/--'  `-'\\_)\n"
+#define MAX_BUFF 1000
 
-
-char* get_cur_dir(void);
-State* exec_cd(State* s);
 int get_prev(void);
 int get_next(void);
 
-char* get_cur_dir(void) {
-    char cwd[MAX_BUFF];
-    if (getcwd(cwd, sizeof(cwd)) == NULL) {
-        exit(1);
-    }
-
-    char* delim = "/";
-    char* lastToken = NULL;
-    char* token = strtok(cwd, delim);
-
-    // loop through the string to extract all other tokens
-    while( token != NULL ) {
-        //printf( " %s\n", token ); // printing each token
-        lastToken = token;
-        token = strtok(NULL, delim);
-    }
-
-    char* curdir = strdup(lastToken);
-    return curdir;
-}
-
-
-State* exec_cd(State* s) {
-    char path[MAX_BUFF];
-    if (array_length(s->args) > 2) {
-        fprintf(stderr, "too many arguments...");
-        return s;
-    }
-
-    char* arg = s->args[1];
-    char curdir[MAX_BUFF];
-    // no cur dir
-    if (getcwd(curdir, sizeof(curdir)) == NULL) {
-        exit(1);
-    }
-    // no args after 'cd'
-    if (arg == NULL) {
-        arg = getenv("HOME");
-    }
-    // cd -
-    if (!strcmp(arg, "-")) {
-        if (!strcmp(s->lastdir->str, "")) {
-            fprintf(stderr, "no previous directory\n");
-            return s;
-        }
-        arg = s->lastdir->str;
-    } else {
-        // cd ~ or anything else relative to home
-        if (arg[0] == '~') {
-            if (arg[1] == '/' || arg[1] == '\0') {
-                snprintf(path, sizeof path, "%s%s", getenv("HOME"), arg + 1);
-                arg = strcat(getenv("HOME"), arg + 1);
-            } else {
-                // cd ~jald
-                fprintf(stderr, "syntax not supported: %s\n", arg);
-                return s;
-            }
-        }
-    }
-    if (chdir(arg)) {
-        fprintf(stderr, "chdir: %s: %s\n", strerror(errno), path);
-        return s;
-    }
-    str_free(s->lastdir);
-    s->lastdir = str_init(curdir);
-    str_free(s->curdir);
-    s->curdir = str_init(get_cur_dir());
-    return s;
-}
-
-void* foo(void* s){
+void* run(void* s){
     State* state = (State*) s;
     // Print value received as argument:
     if (array_length(state->args) == 0) {
@@ -134,53 +63,45 @@ void reset_terminal_mode(struct termios *saved_attributes) {
     tcsetattr(STDIN_FILENO, TCSANOW, saved_attributes);
 }
 
-void shift_left(char* cmd, int cursor) {
-    /**
-     * e.g. ([a, b, c, d, e, , ], 1, a) ==> [a, a, b, c, d, e, ]
-     */
-    // printf("shift left: %s \n", cmd+cursor+1);
-    for (int i = cursor; i < strlen(cmd); i++) {
-        cmd[i] = cmd[i+1];
-    }
-}
-
-void shift_right(char* cmd, int cursor, char letter) {
-    /**
-     * e.g. ([a, b, c, d, e, , ], 1, a) ==> [a, a, b, c, d, e, ]
-     */
-    // printf("shift right: %s, %d, %c, %s, ", cmd, cursor, letter, cmd+cursor);
-    for (int i = strlen(cmd); i > cursor; i--) {
-        cmd[i] = cmd[i-1];
-    }
-    cmd[cursor] = letter;
+void arrow_key_press(char ch) {
+    
 }
 
 int start_shell(void) {
+    // state of the shell
     State* s = (State*) malloc(sizeof(State));
+    // history of commands
     s->history = str_init("");
+    // cwd
     s->curdir = str_init(get_cur_dir());
+    // last accessed directory if there is one
     s->lastdir = str_init("");
     int count = 1;
+
+    // allows arrow keys to be detected
     struct termios saved_attributes;
     tcgetattr(STDIN_FILENO, &saved_attributes);
     set_non_canonical_mode();
 
-
     while (true) {
-        char line[1000];
-        memset(line, '\0', 1000);
+        // where the cursor is on the terminal
         int cursor = 0;
+        // how long the command is
         int cmd_len = 0;
+        char line[MAX_BUFF];
+        // clear the array
+        memset(line, '\0', MAX_BUFF);
         // print terminal prefix
         char* ready = growing_ween((count%13));
         print_colour(ready, rand_col(), rand_bg(), " ");
         print_colour(s->curdir->str, rand_col(), rand_bg(), " ");
 
-
-
         char ch = getchar();
 
         while (ch != '\n') {
+            if (cmd_len >= MAX_BUFF) {
+                exit(1);
+            }
             if (ch == '\033') { // if the first character is the escape character
                 getchar(); // skip the '['
                 switch(getchar()) { // the actual arrow key
@@ -219,40 +140,43 @@ int start_shell(void) {
             } else if (ch == 127) {
                 // back space
                 if (cursor > 0) {
-                    // move back and delete char
-                    // printf("\n%d, %s\n", n-1, line);
-                    // line[cursor-1] = '\0';
+                    // delete character from under cursor
                     shift_left(line, cursor-1);
+                    // reflect this change in stdout 
+                    // delete till end of line (stdout)
                     printf("\b\033[K");
+                    // save cursor pos
                     printf("\033[s");
                     cursor -= 1;
                     cmd_len -= 1;
+                    // reprint to stdout and move cursor back
                     printf("%s", line+cursor);
                     printf("\033[u");
                 }
-                // printf("\nbackspace: %d, %s\n", n, line);
             } else {
+                // insert character in under cursor
                 shift_right(line, cursor, ch);
+                // reflect this change in stdout 
+                // print added char
                 putchar(ch);
+                // save cursor position
                 printf("\033[s");
-
-                // line[cursor] = ch;
                 cursor += 1;
                 cmd_len += 1;
+                // print everything after cursor and update cursor pos
                 printf("%s", line+cursor);
                 printf("\033[u");
             }
-            // printf(" %d\n", n);
             ch = getchar();
         }
-        // reset_terminal_mode(&saved_attributes);
         printf("\ncmd: %s\n", line);
         printf("\n");
+        // get user's command and args
         s->args = split_string(line, " ");
         // start to check and execute command
         pthread_t id;
-        pthread_create(&id, NULL, foo, s);
-        // Wait for foo() and retrieve value in ptr;
+        pthread_create(&id, NULL, run, s);
+        // Wait for run() and retrieve value in ptr;
         pthread_join(id, (void**)s);
 
         // append command to history
@@ -262,6 +186,8 @@ int start_shell(void) {
         free(ready);
         count = count + 1;
     }
+    reset_terminal_mode(&saved_attributes);
+    // free everything
 }
 
 int main(int argc, char** argv) {
