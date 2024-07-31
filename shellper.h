@@ -28,7 +28,7 @@ typedef struct {
 
 typedef struct {
     int count;
-    String* history;
+    char** history;
     String* curdir;
     String* lastdir;  // initialized to zero
     char** args;

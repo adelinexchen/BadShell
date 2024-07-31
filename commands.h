@@ -5,6 +5,6 @@
 
 char* get_cur_dir(void);
 State* exec_cd(State* s);
-
+void print_history(char** history);
 
 #endif

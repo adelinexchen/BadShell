@@ -27,12 +27,12 @@ void* run(void* s){
     } else if (!strcmp(state->args[0], "cd")) {
         exec_cd(state);
     } else if (!strcmp(state->args[0], "history") && array_length(state->args) == 1) {
-        printf("%s", state->history->str);
+        print_history(state->history);
     } else if (!strcmp(state->args[0], "8=D")) {
         printf(WEEN);
     } else if (!strcmp(state->args[0], "exit") && array_length(state->args) == 1) {
         str_free(state->curdir);
-        str_free(state->history);
+        free_nested_array(state->history);
         free_nested_array(state->args);
         free(s);
         exit(0);
@@ -71,7 +71,7 @@ int start_shell(void) {
     // state of the shell
     State* s = (State*) malloc(sizeof(State));
     // history of commands
-    s->history = str_init("");
+    s->history = malloc(sizeof(char*)*MAX_BUFF);
     // cwd
     s->curdir = str_init(get_cur_dir());
     // last accessed directory if there is one
@@ -88,7 +88,7 @@ int start_shell(void) {
         int cursor = 0;
         // how long the command is
         int cmd_len = 0;
-        char line[MAX_BUFF];
+        char* line = malloc(sizeof(char) * MAX_BUFF);
         // clear the array
         memset(line, '\0', MAX_BUFF);
         // print terminal prefix
@@ -97,6 +97,9 @@ int start_shell(void) {
         print_colour(s->curdir->str, rand_col(), rand_bg(), " ");
 
         char ch = getchar();
+        int len = array_length(s->history);
+        int hist_num = len;
+
 
         while (ch != '\n') {
             if (cmd_len >= MAX_BUFF) {
@@ -107,16 +110,36 @@ int start_shell(void) {
                 switch(getchar()) { // the actual arrow key
                     case 'A':
                         // up arrow
-                        printf("\33[2K\r");
-                        print_colour(ready, rand_col(), rand_bg(), " ");
-                        print_colour(s->curdir->str, rand_col(), rand_bg(), " ");
-                        printf("up key");
+                        if (hist_num > 0) {
+                            printf("\33[2K\r");
+                            print_colour(ready, rand_col(), rand_bg(), " ");
+                            print_colour(s->curdir->str, rand_col(), rand_bg(), " ");
+                            printf("%s", s->history[hist_num-1]);
+                            strcpy(line, s->history[hist_num-1]);
+                            hist_num -= 1;
+                        } 
+                        // printf("up: %d\n", hist_num);
                         break;
                     case 'B':
+                        // down arrow
+                        if (hist_num < len - 1) {
                         printf("\33[2K\r");
                         print_colour(ready, rand_col(), rand_bg(), " ");
                         print_colour(s->curdir->str, rand_col(), rand_bg(), " ");
-                        printf("down key");
+                            printf("%s", s->history[hist_num+1]);
+                            strcpy(line, s->history[hist_num+1]);
+                            hist_num += 1;
+                        
+                        } else if (hist_num == len - 1) {
+                        printf("\33[2K\r");
+                        print_colour(ready, rand_col(), rand_bg(), " ");
+                        print_colour(s->curdir->str, rand_col(), rand_bg(), " ");
+                        // printf("%s", line);
+                        
+                        line[0] = '\0';
+                        hist_num += 1;
+                        }
+                        // printf("down: %d\n", hist_num);
                         break;
                     case 'C':
                         // right arrow
@@ -169,6 +192,7 @@ int start_shell(void) {
             }
             ch = getchar();
         }
+
         printf("\ncmd: %s\n", line);
         printf("\n");
         // get user's command and args
@@ -179,12 +203,17 @@ int start_shell(void) {
         // Wait for run() and retrieve value in ptr;
         pthread_join(id, (void**)s);
 
+        if (line[0] != '\0') {
         // append command to history
-        s->history = str_concat(s->history, line);
-        s->history = str_concat(s->history, "\n");
+            line = realloc(line, strlen(line) + 1);
+            s->history[count-1] = line;
+            count += 1;
+        } else {
+            free(line);
+        }
         
         free(ready);
-        count = count + 1;
+        printf("hist num: %d\n", hist_num);
     }
     reset_terminal_mode(&saved_attributes);
     // free everything

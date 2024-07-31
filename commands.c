@@ -88,3 +88,16 @@ State* exec_cd(State* s) {
     s->curdir = str_init(get_cur_dir());
     return s;
 }
+
+void print_history(char** history) {
+    int len = array_length(history);
+
+    // a string field 5 characters wide, 15 chars wide.
+    printf("%-5s %-15s \n", "#", "Command");
+    printf("-----------------------------\n");
+    for (int i = 0; i < len; i++) {
+        // aligns numbers to the left in a field of 5 characters.
+        // aligns a string in a field of 15 chars
+        printf("%-5d %-15s\n", i, history[i]);
+    }
+}
